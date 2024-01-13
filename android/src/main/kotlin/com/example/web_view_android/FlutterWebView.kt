@@ -9,6 +9,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.platform.PlatformView
+import android.webkit.CookieManager
 
 
 class FlutterWebView internal constructor(
@@ -43,6 +44,8 @@ class FlutterWebView internal constructor(
     // set and load new Url
     private fun setText(methodCall: MethodCall, result: MethodChannel.Result ) {
         val url = methodCall.arguments as String
+        val cookieString = "is_app=1; path=/; secure; HttpOnly"
+        CookieManager.getInstance().setCookie(url, cookieString)
         webView.loadUrl(url)
         result.success(null)
     }
