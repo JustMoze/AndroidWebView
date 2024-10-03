@@ -15,7 +15,7 @@ class _WebViewExampleState extends State<WebViewExample> {
   late final WebViewController _webViewController;
   @override
   void initState() {
-    _urlController = TextEditingController(text: 'https://flutter.dev/');
+    _urlController = TextEditingController(text: 'https://app.invoice123.com/auth/login');
     super.initState();
   }
 

@@ -1,15 +1,21 @@
 package com.example.web_view_android
 
+import android.annotation.SuppressLint
+import android.app.DownloadManager
 import android.content.Context
+import android.net.Uri
+import android.os.Environment
 import android.view.View
+import android.webkit.CookieManager
+import android.webkit.URLUtil
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.platform.PlatformView
-import android.webkit.CookieManager
 import android.webkit.ValueCallback
 import android.webkit.WebSettings
 import android.webkit.JavascriptInterface
@@ -17,6 +23,7 @@ import org.json.JSONObject
 import android.os.Handler
 import android.os.Looper
 
+@SuppressLint("SetJavaScriptEnabled")
 class FlutterWebView internal constructor(
     context: Context,
     messenger: BinaryMessenger,
@@ -32,12 +39,29 @@ class FlutterWebView internal constructor(
         webSettings.javaScriptEnabled = true
         webSettings.domStorageEnabled = true
 
-        webView.webViewClient = WebViewClient()
-
+        webView.webViewClient = CustomWebViewClient()
         CookieManager.getInstance().setAcceptCookie(true)
 
-        webView.addJavascriptInterface(WebAppInterface(context), "Android")
+        // Handle file downloads
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
+            val request = DownloadManager.Request(Uri.parse(url))
+            request.setMimeType(mimeType)
+            request.addRequestHeader("cookie", CookieManager.getInstance().getCookie(url))
+            request.addRequestHeader("User-Agent", userAgent)
+            request.setDescription("Downloading file...")
+            request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType))
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            request.setDestinationInExternalFilesDir(
+                context,
+                Environment.DIRECTORY_DOWNLOADS,
+                ".png"
+            )
+            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            dm.enqueue(request)
+            Toast.makeText(context, "Downloading File", Toast.LENGTH_LONG).show()
+        }
 
+        webView.addJavascriptInterface(WebAppInterface(context), "Android")
         methodChannel = MethodChannel(messenger, "plugins.example/flutter_web_view_$id")
         methodChannel.setMethodCallHandler(this)
     }
@@ -48,13 +72,13 @@ class FlutterWebView internal constructor(
 
     override fun onMethodCall(methodCall: MethodCall, result: MethodChannel.Result) {
         when (methodCall.method) {
-            "setUrl" -> setText(methodCall, result)
+            "setUrl" -> setUrl(methodCall, result)
             "evaluateJavascript" -> evaluateJavascript(methodCall, result)
             else -> result.notImplemented()
         }
     }
 
-    private fun setText(methodCall: MethodCall, result: MethodChannel.Result) {
+    private fun setUrl(methodCall: MethodCall, result: MethodChannel.Result) {
         val url = methodCall.arguments as String
         webView.loadUrl(url)
         result.success(null)
@@ -83,5 +107,12 @@ class FlutterWebView internal constructor(
 
     override fun dispose() {
         webView.destroy()
+    }
+
+    private inner class CustomWebViewClient : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+            view.loadUrl(url)
+            return true
+        }
     }
 }
