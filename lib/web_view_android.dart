@@ -7,7 +7,12 @@ typedef FlutterWebViewCreatedCallback = void Function(
 
 class WebView extends StatelessWidget {
   final FlutterWebViewCreatedCallback onMapViewCreated;
-  const WebView({Key? key, required this.onMapViewCreated}) : super(key: key);
+
+  const WebView({
+    Key? key,
+    required this.onMapViewCreated,
+  }) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     switch (defaultTargetPlatform) {
@@ -30,12 +35,26 @@ class WebView extends StatelessWidget {
 // WebView Controller class to set url etc
 class WebViewController {
   WebViewController._(int id)
-      : _channel =
-  MethodChannel('plugins.example/flutter_web_view_$id');
+      : _channel = MethodChannel('plugins.example/flutter_web_view_$id');
 
   final MethodChannel _channel;
 
   Future<void> setUrl({required String url}) async {
     return _channel.invokeMethod('setUrl', url);
   }
+
+  Future<void> setWebViewListener(ValueChanged<Map<String, dynamic>> listener) async {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onAction') {
+        String action = call.arguments['action'];
+        String? token = call.arguments['token'];
+
+        // Pass the action and token to the Flutter listener
+        listener({'action': action, 'token': token});
+      }
+    });
+  }
+
+  Future<void> evaluateJavascript(String script) async =>
+      _channel.invokeMethod('evaluateJavascript', script);
 }
