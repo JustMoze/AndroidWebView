@@ -18,7 +18,7 @@ class WebView extends StatelessWidget {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return AndroidView(
-          viewType: 'plugins.example/flutter_web_view',
+          viewType: "plugins.example/flutter_web_view",
           onPlatformViewCreated: _onPlatformViewCreated,
         );
       default:
@@ -39,21 +39,20 @@ class WebViewController {
 
   final MethodChannel _channel;
 
-  Future<void> setUrl({required String url}) async {
-    return _channel.invokeMethod('setUrl', url);
-  }
+  Future<void> setUrl({required String url}) async =>
+      _channel.invokeMethod('setUrl', url);
 
-  Future<void> setWebViewListener(ValueChanged<Map<String, dynamic>> listener) async {
-    _channel.setMethodCallHandler((call) async {
-      if (call.method == 'onAction') {
-        String action = call.arguments['action'];
-        String? token = call.arguments['token'];
+  Future<void> setWebViewListener(
+    ValueChanged<Map<String, dynamic>> listener,
+  ) async =>
+      _channel.setMethodCallHandler((call) async {
+        if (call.method == 'onAction') {
+          String action = call.arguments['action'];
+          String? token = call.arguments['token'];
 
-        // Pass the action and token to the Flutter listener
-        listener({'action': action, 'token': token});
-      }
-    });
-  }
+          listener({'action': action, 'token': token});
+        }
+      });
 
   Future<void> evaluateJavascript(String script) async =>
       _channel.invokeMethod('evaluateJavascript', script);
