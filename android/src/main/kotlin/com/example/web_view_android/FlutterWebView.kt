@@ -1,19 +1,18 @@
 package com.example.web_view_android
 
-import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.DownloadManager
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
-import android.webkit.URLUtil
-import android.os.Environment
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import android.app.Dialog
 import android.view.View
 import android.webkit.CookieManager
-import android.widget.Toast
 import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -21,12 +20,7 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
-import android.os.Handler
-import android.os.Looper
-import android.webkit.WebResourceRequest
 import org.json.JSONObject
-import android.util.Log
-import io.flutter.embedding.android.FlutterActivity
 
 class FlutterWebView(
     val activity: Activity,
@@ -35,7 +29,7 @@ class FlutterWebView(
     args: Any?
 ) : PlatformView, MethodChannel.MethodCallHandler {
 
-    private val webView: WebView = WebView(activity)
+    private val webView: WebView
     private val methodChannel: MethodChannel
     private var uploadMessage: ValueCallback<Array<Uri>>? = null
     private val FILECHOOSER_RESULTCODE = 1001
@@ -43,38 +37,26 @@ class FlutterWebView(
     private val TAG = "FlutterWebView"
 
     init {
+        webView = WebView(activity)
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
         val webSettings: WebSettings = webView.settings
         webSettings.javaScriptEnabled = true
         webSettings.domStorageEnabled = true
         webSettings.allowFileAccess = true
+        webSettings.setPluginState(WebSettings.PluginState.ON);
         webSettings.setSupportMultipleWindows(true)
+        webSettings.javaScriptCanOpenWindowsAutomatically = true
         webSettings.cacheMode = WebSettings.LOAD_DEFAULT
 
+        webView.webViewClient = MyWebViewClient(activity)
         webView.webChromeClient = MyWebChromeClient(activity)
-        webView.webViewClient = MyWebViewClient()
+
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
+            (activity as? FileChooserLauncher)?.launchFileDownload(url)
+        }
 
         CookieManager.getInstance().setAcceptCookie(true)
-
-        // Handle file downloads
-        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, contentLength ->
-            val request = DownloadManager.Request(Uri.parse(url))
-            request.setMimeType(mimeType)
-            request.addRequestHeader("cookie", CookieManager.getInstance().getCookie(url))
-            request.addRequestHeader("User-Agent", userAgent)
-            request.setDescription("Downloading file...")
-            request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType))
-            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            request.setDestinationInExternalFilesDir(
-                activity,
-                Environment.DIRECTORY_DOWNLOADS,
-                ".png"
-            )
-            val dm = activity.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            dm.enqueue(request)
-            Toast.makeText(activity, "Downloading File", Toast.LENGTH_LONG).show()
-        }
 
         webView.addJavascriptInterface(WebAppInterface(activity), "Android")
         methodChannel = MethodChannel(messenger, "plugins.example/flutter_web_view_$viewId")
@@ -144,13 +126,36 @@ class FlutterWebView(
     }
 
     inner class MyWebChromeClient(private val myActivity: Activity) : WebChromeClient() {
+
+        override fun onCreateWindow(
+            view: WebView?,
+            dialog: Boolean,
+            userGesture: Boolean,
+            resultMsg: android.os.Message?
+        ): Boolean {
+            if (view == null || resultMsg == null) return false
+
+            val newWebView: WebView = WebView(view.context)
+
+            newWebView.settings.javaScriptEnabled = true
+            newWebView.webViewClient = MyWebViewClient(myActivity)
+
+            val dialog: Dialog = Dialog(view.context)
+            dialog.setContentView(newWebView)
+            dialog.show()
+
+            val transport: WebView.WebViewTransport? = resultMsg.obj as? WebView.WebViewTransport
+            transport?.webView = newWebView
+            resultMsg.sendToTarget()
+
+            return true
+        }
+
         override fun onShowFileChooser(
             webView: WebView?,
             filePathCallback: ValueCallback<Array<Uri>>?,
             fileChooserParams: FileChooserParams?
         ): Boolean {
-            Log.d("FlutterWebView", "onShowFileChooser triggered")
-
             if (fileChooserParams == null) {
                 Log.e("FlutterWebView", "fileChooserParams is null!")
                 return false
@@ -163,28 +168,31 @@ class FlutterWebView(
                 return false
             }
 
-            // Call the method in MainActivity to launch the file chooser
-            Log.d("FlutterWebView", "Activity is instance of FileChooserLauncher: ${activity is FileChooserLauncher}")
-            Log.d("FlutterWebView", "Activity class: ${activity?.javaClass?.simpleName}")
             (activity as? FileChooserLauncher)?.launchFileChooser(filePathCallback, contentIntent)
             return true
         }
     }
 
-    inner class MyWebViewClient : WebViewClient() {
-        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-            val url = request?.url.toString()
-            Log.d("MainActivity", "URL being loaded: $url")
+    inner class MyWebViewClient(private val mActivity: Activity) : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+            if (url.isNullOrBlank()) return false
 
-            // If it's a URL that should open externally, handle it, else load in WebView
             if (url.contains("logout") || url.contains("login")) {
-                // Allow loading in WebView for these URLs
-                return false
+                view?.loadUrl(url)
+                return true
             }
 
-            // Load the URL in WebView itself
             view?.loadUrl(url)
             return true
+        }
+
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            val url: String? = request.getUrl().toString()
+            if (url != null) {
+                view.loadUrl(url)
+                return true
+            }
+            return false
         }
     }
 }

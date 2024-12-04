@@ -6,4 +6,5 @@ import android.webkit.ValueCallback
 
 interface FileChooserLauncher {
     fun launchFileChooser(filePathCallback: ValueCallback<Array<Uri>>?, intent: Intent)
+    fun launchFileDownload(url: String)
 }
